@@ -20,13 +20,22 @@ try:
 except:
     MOVIEPY_OK = False
 
-TELEGRAM_TOKEN  = os.getenv("8691481092:AAGEx2xPFCYPm3wyfbuuVGaqgZTeN_nKwmA", "")
-GEMINI_API_KEY  = os.getenv("AIzaSyDsAC5rDyKeoLQeCU2lekHJK5gvSDUecCY", "")
-YOUTUBE_API_KEY = os.getenv("AIzaSyBiW8UeSTc967iogC5L818Ke1XBFur4YUc", "")
+# ============================================================
+#   🔑 APNI KEYS YAHAN DAALEN
+# ============================================================
+TELEGRAM_TOKEN  = "8691481092:AAGEx2xPFCYPm3wyfbuuVGaqgZTeN_nKwmA"   # BotFather se mila token
+GEMINI_API_KEY  = "AIzaSyDsAC5rDyKeoLQeCU2lekHJK5gvSDUecCY"        # aistudio.google.com
+YOUTUBE_API_KEY = "AIzaSyBiW8UeSTc967iogC5L818Ke1XBFur4YUc"       # console.cloud.google.com
+# ============================================================
 
-genai.configure(api_key=AIzaSyDsAC5rDyKeoLQeCU2lekHJK5gvSDUecCY  )
+# Railway/Render environment variables se bhi le sakta hai
+TELEGRAM_TOKEN  = os.getenv("TELEGRAM_TOKEN",  TELEGRAM_TOKEN)
+GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY",  GEMINI_API_KEY)
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", YOUTUBE_API_KEY)
+
+genai.configure(api_key=GEMINI_API_KEY)
 gemini = genai.GenerativeModel("gemini-1.5-flash")
-yt     = build("youtube", "v3", developerKey=AIzaSyBiW8UeSTc967iogC5L818Ke1XBFur4YUc)
+yt     = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
@@ -35,12 +44,35 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 SESSIONS: dict = {}
 
-def get_video_id(url: str) -> Optional[str]:
-    for pat in [r"youtu\.be/([A-Za-z0-9_-]{11})",
-                r"youtube\.com/watch\?v=([A-Za-z0-9_-]{11})",
-                r"youtube\.com/shorts/([A-Za-z0-9_-]{11})"]:
-        m = re.search(pat, url)
-        if m: return m.group(1)
+# ============================================================
+#   HELPER FUNCTIONS
+# ============================================================
+
+def get_video_id(text: str) -> Optional[str]:
+    """URL se video ID nikalta hai"""
+    for pat in [
+        r"youtu\.be/([A-Za-z0-9_-]{11})",
+        r"youtube\.com/watch\?v=([A-Za-z0-9_-]{11})",
+        r"youtube\.com/shorts/([A-Za-z0-9_-]{11})"
+    ]:
+        m = re.search(pat, text)
+        if m:
+            return m.group(1)
+    return None
+
+def search_youtube(query: str) -> Optional[str]:
+    """Series name se YouTube search karke pehla video ID deta hai"""
+    try:
+        r = yt.search().list(
+            part="snippet",
+            q=query + " trailer official",
+            type="video",
+            maxResults=1
+        ).execute()
+        if r.get("items"):
+            return r["items"][0]["id"]["videoId"]
+    except Exception as e:
+        log.error(f"YouTube search error: {e}")
     return None
 
 def fetch_metadata(vid: str) -> dict:
@@ -53,13 +85,13 @@ def fetch_metadata(vid: str) -> dict:
     sn  = it["snippet"]
     st  = it.get("statistics", {})
     return {
-        "id": vid,
-        "title": sn.get("title", ""),
+        "id":          vid,
+        "title":       sn.get("title", ""),
         "description": sn.get("description", "")[:800],
-        "tags": sn.get("tags", [])[:15],
-        "channel": sn.get("channelTitle", ""),
-        "duration": it["contentDetails"].get("duration", ""),
-        "views": st.get("viewCount", "0"),
+        "tags":        sn.get("tags", [])[:15],
+        "channel":     sn.get("channelTitle", ""),
+        "duration":    it["contentDetails"].get("duration", ""),
+        "views":       st.get("viewCount", "0"),
     }
 
 def fetch_transcript(vid: str) -> str:
@@ -70,8 +102,10 @@ def fetch_transcript(vid: str) -> str:
                     vid, languages=lang
                 ) if lang else YouTubeTranscriptApi.get_transcript(vid)
                 return " ".join(t["text"] for t in tl)[:3500]
-            except: continue
-    except: pass
+            except:
+                continue
+    except:
+        pass
     return ""
 
 def ai_analyze(meta: dict, transcript: str) -> dict:
@@ -131,46 +165,11 @@ def make_tts(text: str, lang: str, path: str) -> str:
     ).save(path)
     return path
 
-def make_title_card(title_en, title_hi, ep_num, out):
-    w, h = 1280, 720
-    img  = Image.new("RGB", (w, h))
-    draw = ImageDraw.Draw(img)
-    for y in range(h):
-        p = y / h
-        draw.line(
-            [(0,y),(w,y)],
-            fill=(int(8+p*25), int(4+p*8), int(20+p*55))
-        )
-    for t in range(4):
-        draw.rectangle(
-            [18+t, 18+t, w-18-t, h-18-t],
-            outline=(200, 160, 40)
-        )
-    try:
-        fb = ImageFont.truetype(
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 54
-        )
-        fm = ImageFont.truetype(
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 30
-        )
-    except:
-        fb = fm = ImageFont.load_default()
-    draw.text((w//2, h//2-80), title_en,
-              fill=(255,215,60), font=fb, anchor="mm")
-    draw.text((w//2, h//2+10), title_hi,
-              fill=(220,200,255), font=fm, anchor="mm")
-    draw.text((w//2, h//2+70), f"Episode {ep_num}",
-              fill=(180,180,180), font=fm, anchor="mm")
-    draw.text((w//2, h-35), "Original AI Series",
-              fill=(80,80,80), font=fm, anchor="mm")
-    img.save(out, "PNG")
-    return out
-
 def make_teaser_video(ep, analysis, out_dir):
     if not MOVIEPY_OK:
         raise RuntimeError("MoviePy not installed")
-    n = ep['ep_number']
-    s = analysis["original_series"]
+    n  = ep['ep_number']
+    s  = analysis["original_series"]
     ap = os.path.join(out_dir, f"a{n}.mp3")
     op = os.path.join(out_dir, f"ep{n}.mp4")
     make_tts(
@@ -178,19 +177,19 @@ def make_teaser_video(ep, analysis, out_dir):
         f"{ep['synopsis_english']} Stay tuned!", "en", ap
     )
     c1 = CompositeVideoClip([
-        ColorClip(size=(1280,720), color=[8,4,20], duration=5),
+        ColorClip(size=(1280, 720), color=[8, 4, 20], duration=5),
         TextClip(s['title_english'], fontsize=56, color="gold",
-                 font="DejaVu-Sans-Bold", size=(1200,None),
+                 font="DejaVu-Sans-Bold", size=(1200, None),
                  method="caption").set_position("center").set_duration(5),
         TextClip(f"Ep {n}: {ep['title_english']}", fontsize=32,
-                 color="white", font="DejaVu-Sans", size=(1200,None),
-                 method="caption").set_position(("center",430)).set_duration(5)
+                 color="white", font="DejaVu-Sans", size=(1200, None),
+                 method="caption").set_position(("center", 430)).set_duration(5)
     ])
     c2 = CompositeVideoClip([
-        ColorClip(size=(1280,720), color=[5,12,8], duration=8),
+        ColorClip(size=(1280, 720), color=[5, 12, 8], duration=8),
         TextClip(ep['synopsis_english'], fontsize=26,
                  color="lightgreen", font="DejaVu-Sans",
-                 size=(1100,None), method="caption"
+                 size=(1100, None), method="caption"
                  ).set_position("center").set_duration(8)
     ])
     final = concatenate_videoclips([c1, c2])
@@ -203,20 +202,27 @@ def make_teaser_video(ep, analysis, out_dir):
     )
     return op
 
+# ============================================================
+#   COMMAND HANDLERS
+# ============================================================
+
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎬 *YouTube Series Creator Bot*\n"
         "_100% FREE — Google Gemini + YouTube API_\n\n"
         "━━━━━━━━━━━━━━━━━━━━\n"
         "📌 *Commands:*\n"
-        "• `/analyze ` — Analyze & generate\n"
+        "• `/analyze Mirzapur` — Name se analyze\n"
+        "• `/analyze https://youtu.be/xxx` — URL se analyze\n"
         "• `/series` — Series overview\n"
         "• `/script 1` — Full episode script\n"
         "• `/teaser 1` — Teaser video MP4\n"
         "• `/audio 1` — Hindi + English audio\n"
         "• `/help` — Info\n"
         "━━━━━━━━━━━━━━━━━━━━\n\n"
-        "🚀 Start: `/analyze https://youtu.be/G-3JSyi_Ss0`",
+        "🚀 Example:\n"
+        "`/analyze Mirzapur`\n"
+        "`/analyze Sacred Games`",
         parse_mode=ParseMode.MARKDOWN
     )
 
@@ -227,6 +233,9 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "✅ YouTube Data API v3 — 10k units/day FREE\n"
         "✅ gTTS — Unlimited FREE TTS\n"
         "✅ Telegram Bot API — FREE\n\n"
+        "📌 *Usage:*\n"
+        "`/analyze Mirzapur` — Series name\n"
+        "`/analyze https://youtu.be/xxx` — YouTube URL\n\n"
         "⚖️ Legal: No downloading. All original content.",
         parse_mode=ParseMode.MARKDOWN
     )
@@ -234,41 +243,70 @@ async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cmd_analyze(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not ctx.args:
         await update.message.reply_text(
-            "Usage: `/analyze `",
+            "❗ *Usage:*\n"
+            "`/analyze Mirzapur`\n"
+            "`/analyze Sacred Games`\n"
+            "`/analyze https://youtu.be/xxx`",
             parse_mode=ParseMode.MARKDOWN
         )
         return
-    vid = get_video_id(ctx.args[0])
-    if not vid:
-        await update.message.reply_text("❌ Invalid URL.")
-        return
-    uid = update.effective_user.id
+
+    uid   = update.effective_user.id
+    query = " ".join(ctx.args)
+
     await update.message.chat.send_action(ChatAction.TYPING)
     msg = await update.message.reply_text(
-        "🔍 *Step 1/4:* Fetching metadata...",
+        "🔍 *Step 1/4:* Finding video...",
         parse_mode=ParseMode.MARKDOWN
     )
+
     try:
+        # URL hai ya Series Name?
+        vid = get_video_id(query)
+        if not vid:
+            # Series name se YouTube search
+            await msg.edit_text(
+                f"🔎 Searching YouTube: *{query}*...",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            vid = search_youtube(query)
+            if not vid:
+                await msg.edit_text(
+                    f"❌ *'{query}'* ke liye koi video nahi mila.\n\n"
+                    f"Try karein:\n`/analyze Mirzapur trailer`\n"
+                    f"ya YouTube URL paste karein.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+
         meta = fetch_metadata(vid)
         await msg.edit_text(
             f"✅ _{meta['title']}_\n\n"
-            f"📝 *Step 2/4:* Transcript...",
+            f"📝 *Step 2/4:* Transcript fetch ho raha hai...",
             parse_mode=ParseMode.MARKDOWN
         )
+
         transcript = fetch_transcript(vid)
         ts = f"{len(transcript)} chars" if transcript else "unavailable"
+
         await msg.edit_text(
             f"✅ Metadata | Transcript: {ts}\n\n"
-            f"🤖 *Step 3/4:* Gemini AI (FREE)...",
+            f"🤖 *Step 3/4:* Gemini AI analyze kar raha hai...",
             parse_mode=ParseMode.MARKDOWN
         )
+
         analysis = ai_analyze(meta, transcript)
         SESSIONS[uid] = {"meta": meta, "analysis": analysis}
+
         await msg.edit_text(
-            "✅ Done!\n\n🎬 *Step 4/4:* Building series...",
+            "✅ Analysis done!\n\n"
+            "🎬 *Step 4/4:* Series build ho rahi hai...",
             parse_mode=ParseMode.MARKDOWN
         )
-        s, ep = analysis["original_series"], analysis["episodes"]
+
+        s   = analysis["original_series"]
+        ep  = analysis["episodes"]
+
         result = (
             f"🎬 *ORIGINAL SERIES READY!*\n\n"
             f"🇬🇧 *{s['title_english']}*\n"
@@ -286,12 +324,17 @@ async def cmd_analyze(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 f"   {e['synopsis_english'][:80]}...\n\n"
             )
         result += "━━━━━━━━━━━━━━━━━━━━\n"
-        result += "`/script 1` | `/teaser 1` | `/audio 1`"
+        result += "`/series` | `/script 1` | `/teaser 1` | `/audio 1`"
+
         await msg.edit_text(result, parse_mode=ParseMode.MARKDOWN)
+
     except json.JSONDecodeError:
-        await msg.edit_text("❌ AI parse error. Try again.")
+        await msg.edit_text(
+            "❌ AI parse error. Dobara try karein:\n`/analyze Mirzapur`",
+            parse_mode=ParseMode.MARKDOWN
+        )
     except Exception as e:
-        log.error(f"analyze: {e}")
+        log.error(f"analyze error: {e}")
         await msg.edit_text(f"❌ Error: {e}")
 
 async def cmd_series(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -299,7 +342,7 @@ async def cmd_series(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     sess = SESSIONS.get(uid)
     if not sess:
         await update.message.reply_text(
-            "❗ First `/analyze `",
+            "❗ Pehle analyze karein:\n`/analyze Mirzapur`",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -311,8 +354,10 @@ async def cmd_series(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ) for e in eps
     ]]
     await update.message.reply_text(
-        f"🎬 *{s['title_english']}*\n_{s['title_hindi']}_\n\n"
-        f"{s['synopsis_english']}",
+        f"🎬 *{s['title_english']}*\n"
+        f"_{s['title_hindi']}_\n\n"
+        f"{s['synopsis_english']}\n\n"
+        f"📺 Episode dekhne ke liye button dabayein:",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup(kb)
     )
@@ -322,7 +367,7 @@ async def cmd_script(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     sess = SESSIONS.get(uid)
     if not sess:
         await update.message.reply_text(
-            "❗ First `/analyze `",
+            "❗ Pehle analyze karein:\n`/analyze Mirzapur`",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -332,11 +377,11 @@ async def cmd_script(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         None
     )
     if not ep:
-        await update.message.reply_text(f"❌ Episode {n} not found.")
+        await update.message.reply_text(f"❌ Episode {n} nahi mila.")
         return
     await update.message.chat.send_action(ChatAction.TYPING)
     s = await update.message.reply_text(
-        f"✍️ Generating Episode {n} script..."
+        f"✍️ Episode {n} ka script generate ho raha hai..."
     )
     script = ai_script(ep, sess["analysis"])
     with tempfile.NamedTemporaryFile(
@@ -361,7 +406,7 @@ async def cmd_teaser(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     sess = SESSIONS.get(uid)
     if not sess:
         await update.message.reply_text(
-            "❗ First `/analyze `",
+            "❗ Pehle analyze karein:\n`/analyze Mirzapur`",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -371,16 +416,16 @@ async def cmd_teaser(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         None
     )
     if not ep:
-        await update.message.reply_text(f"❌ Episode {n} not found.")
+        await update.message.reply_text(f"❌ Episode {n} nahi mila.")
         return
     await update.message.chat.send_action(ChatAction.UPLOAD_VIDEO)
     s = await update.message.reply_text(
-        f"🎬 Building teaser Ep {n}... (~30-60 sec)"
+        f"🎬 Teaser Ep {n} ban raha hai... (~30-60 sec)"
     )
     try:
         with tempfile.TemporaryDirectory() as d:
             vpath = make_teaser_video(ep, sess["analysis"], d)
-            await s.edit_text("📤 Uploading...")
+            await s.edit_text("📤 Upload ho raha hai...")
             await update.message.reply_video(
                 video=open(vpath, "rb"),
                 caption=(
@@ -393,7 +438,7 @@ async def cmd_teaser(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             )
             await s.delete()
     except Exception as e:
-        log.error(f"teaser: {e}")
+        log.error(f"teaser error: {e}")
         await s.edit_text(f"❌ {e}")
 
 async def cmd_audio(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -401,7 +446,7 @@ async def cmd_audio(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     sess = SESSIONS.get(uid)
     if not sess:
         await update.message.reply_text(
-            "❗ First `/analyze `",
+            "❗ Pehle analyze karein:\n`/analyze Mirzapur`",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -411,11 +456,11 @@ async def cmd_audio(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         None
     )
     if not ep:
-        await update.message.reply_text(f"❌ Episode {n} not found.")
+        await update.message.reply_text(f"❌ Episode {n} nahi mila.")
         return
     await update.message.chat.send_action(ChatAction.UPLOAD_VOICE)
     s = await update.message.reply_text(
-        "🔊 Generating Hindi + English audio..."
+        "🔊 Hindi + English audio generate ho raha hai..."
     )
     try:
         with tempfile.TemporaryDirectory() as d:
@@ -434,32 +479,35 @@ async def cmd_audio(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_audio(
                 audio=open(enp, "rb"),
                 title=f"Ep {n} English",
-                caption="🇬🇧 English"
+                caption="🇬🇧 English Audio"
             )
             await update.message.reply_audio(
                 audio=open(hip, "rb"),
                 title=f"Ep {n} Hindi",
-                caption="🇮🇳 हिंदी"
+                caption="🇮🇳 हिंदी Audio"
             )
             await s.delete()
     except Exception as e:
-        log.error(f"audio: {e}")
+        log.error(f"audio error: {e}")
         await s.edit_text(f"❌ {e}")
 
 async def cb_ep(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    q   = update.callback_query
+    q    = update.callback_query
     await q.answer()
-    n   = int(q.data.split("_")[1])
-    uid = update.effective_user.id
+    n    = int(q.data.split("_")[1])
+    uid  = update.effective_user.id
     sess = SESSIONS.get(uid)
     if not sess:
-        await q.edit_message_text("Session expired. /analyze again.")
+        await q.edit_message_text(
+            "Session expire ho gaya. Dobara /analyze karein."
+        )
         return
     ep = next(
         (e for e in sess["analysis"]["episodes"] if e["ep_number"] == n),
         None
     )
-    if not ep: return
+    if not ep:
+        return
     await q.edit_message_text(
         f"📺 *Episode {n}*\n\n"
         f"🇬🇧 *{ep['title_english']}*\n"
@@ -478,10 +526,14 @@ async def auto_url(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.args = [text.split()[0]]
         await cmd_analyze(update, ctx)
 
+# ============================================================
+#   MAIN
+# ============================================================
+
 def main():
     if not all([TELEGRAM_TOKEN, GEMINI_API_KEY, YOUTUBE_API_KEY]):
         raise RuntimeError(
-            "Set TELEGRAM_TOKEN, GEMINI_API_KEY, YOUTUBE_API_KEY"
+            "❌ Keys missing! Set TELEGRAM_TOKEN, GEMINI_API_KEY, YOUTUBE_API_KEY"
         )
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     for cmd, fn in [
