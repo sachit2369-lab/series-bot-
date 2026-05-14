@@ -24,9 +24,9 @@ TELEGRAM_TOKEN  = os.getenv("8691481092:AAGEx2xPFCYPm3wyfbuuVGaqgZTeN_nKwmA", ""
 GEMINI_API_KEY  = os.getenv("AIzaSyDsAC5rDyKeoLQeCU2lekHJK5gvSDUecCY", "")
 YOUTUBE_API_KEY = os.getenv("AIzaSyBiW8UeSTc967iogC5L818Ke1XBFur4YUc", "")
 
-genai.configure(api_key=GEMINI_API_KEY)
+genai.configure(api_key=AIzaSyDsAC5rDyKeoLQeCU2lekHJK5gvSDUecCY  )
 gemini = genai.GenerativeModel("gemini-1.5-flash")
-yt     = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
+yt     = build("youtube", "v3", developerKey=AIzaSyBiW8UeSTc967iogC5L818Ke1XBFur4YUc)
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
