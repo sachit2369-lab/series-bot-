@@ -34,7 +34,7 @@ GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY",  GEMINI_API_KEY)
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", YOUTUBE_API_KEY)
 
 genai.configure(api_key=GEMINI_API_KEY)
-gemini = genai.GenerativeModel("gemini-1.5-flash")
+gemini = genai.GenerativeModel("gemini-2.0-flash")
 yt     = build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
 
 logging.basicConfig(
