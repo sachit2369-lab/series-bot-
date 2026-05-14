@@ -20,9 +20,9 @@ try:
 except:
     MOVIEPY_OK = False
 
-TELEGRAM_TOKEN  = os.getenv("TELEGRAM_TOKEN", "")
-GEMINI_API_KEY  = os.getenv("GEMINI_API_KEY", "")
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+TELEGRAM_TOKEN  = os.getenv("8691481092:AAGEx2xPFCYPm3wyfbuuVGaqgZTeN_nKwmA", "")
+GEMINI_API_KEY  = os.getenv("AIzaSyDsAC5rDyKeoLQeCU2lekHJK5gvSDUecCY", "")
+YOUTUBE_API_KEY = os.getenv("AIzaSyBiW8UeSTc967iogC5L818Ke1XBFur4YUc", "")
 
 genai.configure(api_key=GEMINI_API_KEY)
 gemini = genai.GenerativeModel("gemini-1.5-flash")
